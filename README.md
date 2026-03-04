@@ -1,4 +1,4 @@
-# Pixel Agents
+# Pixel Agents Standalone
 
 A self-hosted pixel art dashboard that turns your Claude Code agents into animated characters in a virtual office.
 
@@ -47,6 +47,17 @@ bun run standalone/server.ts
 
 6 character skins based on [JIK-A-4, Metro City](https://jik-a-4.itch.io/metrocity-free-topdown-character-pack). Beyond 6 simultaneous agents, skins repeat with randomized hue shifts.
 
+## Agent Lifecycle
+
+By default, agents stay visible for **30 minutes** after their last activity (`INACTIVE_TIMEOUT_MS`). This works well for interactive Claude Code sessions that run for a while.
+
+Some tools — like CLI proxies or automation wrappers — spawn many short-lived Claude sessions. For these projects, set `SHORT_THRESHOLD_PROJECTS` to use a **3-minute** window instead: agents appear quickly, and disappear quickly when done.
+
+```env
+# Agents from claude-cli-proxy disappear after 3 min of inactivity
+SHORT_THRESHOLD_PROJECTS=claude-cli-proxy
+```
+
 ## Configuration
 
 Edit `standalone/.env`:
@@ -57,7 +68,9 @@ Edit `standalone/.env`:
 | `SSH_HOST` | *(empty)* | Hostname for `vscode://` remote links |
 | `PROJECT_FILTER` | *(empty)* | Limit to a single project hash |
 | `INACTIVE_TIMEOUT_MS` | `1800000` | Hide agents after 30 min of inactivity |
-| `SHORT_THRESHOLD_PROJECTS` | *(empty)* | High-churn projects using shorter adoption window |
+| `NEW_FILE_THRESHOLD_MS` | `1800000` | Adopt sessions modified within the last 30 min at startup |
+| `NEW_FILE_THRESHOLD_SHORT_MS` | `180000` | Shorter adoption window (3 min) for high-churn projects |
+| `SHORT_THRESHOLD_PROJECTS` | *(empty)* | Comma-separated projects using the 3 min thresholds |
 | `EXCLUDED_PROJECTS` | *(empty)* | Projects to skip entirely |
 
 CLI overrides: `bun run standalone/server.ts --port 8080 --ssh-host myserver.com --project <hash>`
