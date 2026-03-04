@@ -252,6 +252,7 @@ function App() {
         workspaceFolders={workspaceFolders}
         isPanelOpen={isPanelOpen}
         onTogglePanel={handleTogglePanel}
+        activeAgentCount={agents.filter(id => (agentTools[id] || []).some(t => !t.done)).length}
       />
 
       {editor.isEditMode && editor.isDirty && (
@@ -339,6 +340,7 @@ function App() {
         globalFeed={globalFeed}
         agentStats={agentStats}
         folderNames={folderNames}
+        sshHost={sshHost}
         onSelectAgent={handlePanelSelectAgent}
       />
     </div>

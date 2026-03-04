@@ -12,6 +12,7 @@ interface BottomToolbarProps {
   workspaceFolders: WorkspaceFolder[]
   isPanelOpen: boolean
   onTogglePanel: () => void
+  activeAgentCount: number
 }
 
 const panelStyle: React.CSSProperties = {
@@ -55,6 +56,7 @@ export function BottomToolbar({
   workspaceFolders,
   isPanelOpen,
   onTogglePanel,
+  activeAgentCount,
 }: BottomToolbarProps) {
   const [hovered, setHovered] = useState<string | null>(null)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
@@ -182,7 +184,19 @@ export function BottomToolbar({
         }
         title="Toggle info panel"
       >
-        ≡
+        ≡{activeAgentCount > 0 && (
+          <span style={{
+            marginLeft: 4,
+            background: 'var(--pixel-status-active)',
+            color: '#fff',
+            fontSize: '16px',
+            padding: '0 4px',
+            borderRadius: 0,
+            verticalAlign: 'middle',
+          }}>
+            {activeAgentCount}
+          </span>
+        )}
       </button>
       <div style={{ position: 'relative' }}>
         <button

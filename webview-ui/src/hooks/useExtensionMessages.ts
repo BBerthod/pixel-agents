@@ -17,6 +17,7 @@ export interface HistoryEntry {
   startTime: number
   endTime?: number
   agentId: number
+  filePath?: string
 }
 
 export interface AgentStats {
@@ -75,6 +76,29 @@ export interface ExtensionMessageState {
   folderNames: Record<number, string>
 }
 
+// ── localStorage helpers ──────────────────────────────────────
+
+const LS_KEYS = {
+  agentHistory: 'pixel-agents:agentHistory',
+  globalFeed: 'pixel-agents:globalFeed',
+  agentStats: 'pixel-agents:agentStats',
+  folderNames: 'pixel-agents:folderNames',
+}
+
+function lsLoad<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key)
+    if (raw) return JSON.parse(raw) as T
+  } catch { /* ignore */ }
+  return fallback
+}
+
+function lsSave(key: string, value: unknown): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(value))
+  } catch { /* ignore quota errors */ }
+}
+
 function saveAgentSeats(os: OfficeState): void {
   const seats: Record<number, { palette: number; hueShift: number; seatId: string | null }> = {}
   for (const ch of os.characters.values()) {
@@ -99,10 +123,16 @@ export function useExtensionMessages(
   const [loadedAssets, setLoadedAssets] = useState<{ catalog: FurnitureAsset[]; sprites: Record<string, string[][]> } | undefined>()
   const [workspaceFolders, setWorkspaceFolders] = useState<WorkspaceFolder[]>([])
   const [sshHost, setSshHost] = useState<string | null>(null)
-  const [agentHistory, setAgentHistory] = useState<Record<number, HistoryEntry[]>>({})
-  const [globalFeed, setGlobalFeed] = useState<HistoryEntry[]>([])
-  const [agentStats, setAgentStats] = useState<Record<number, AgentStats>>({})
-  const [folderNames, setFolderNames] = useState<Record<number, string>>({})
+  const [agentHistory, setAgentHistory] = useState<Record<number, HistoryEntry[]>>(() => lsLoad(LS_KEYS.agentHistory, {}))
+  const [globalFeed, setGlobalFeed] = useState<HistoryEntry[]>(() => lsLoad(LS_KEYS.globalFeed, []))
+  const [agentStats, setAgentStats] = useState<Record<number, AgentStats>>(() => lsLoad(LS_KEYS.agentStats, {}))
+  const [folderNames, setFolderNames] = useState<Record<number, string>>(() => lsLoad(LS_KEYS.folderNames, {}))
+
+  // Persist to localStorage whenever state changes
+  useEffect(() => { lsSave(LS_KEYS.agentHistory, agentHistory) }, [agentHistory])
+  useEffect(() => { lsSave(LS_KEYS.globalFeed, globalFeed) }, [globalFeed])
+  useEffect(() => { lsSave(LS_KEYS.agentStats, agentStats) }, [agentStats])
+  useEffect(() => { lsSave(LS_KEYS.folderNames, folderNames) }, [folderNames])
 
   // Track whether initial layout has been loaded (ref to avoid re-render)
   const layoutReadyRef = useRef(false)
@@ -239,13 +269,14 @@ export function useExtensionMessages(
         const status = msg.status as string
         const msgToolName = (msg.toolName as string | undefined) || extractToolName(status) || status
         const startTime = (msg.timestamp as number | undefined) || Date.now()
+        const filePath = msg.filePath as string | undefined
         setAgentTools((prev) => {
           const list = prev[id] || []
           if (list.some((t) => t.toolId === toolId)) return prev
           return { ...prev, [id]: [...list, { toolId, status, done: false }] }
         })
         // Track history
-        const entry: HistoryEntry = { toolId, toolName: msgToolName, status, startTime, agentId: id }
+        const entry: HistoryEntry = { toolId, toolName: msgToolName, status, startTime, agentId: id, filePath }
         setAgentHistory((prev) => {
           const list = prev[id] || []
           const updated = [...list, entry]
@@ -349,12 +380,13 @@ export function useExtensionMessages(
         }
       } else if (msg.type === 'agentToolPermission') {
         const id = msg.id as number
+        const permissionWaitSince = Date.now()
         setAgentTools((prev) => {
           const list = prev[id]
           if (!list) return prev
           return {
             ...prev,
-            [id]: list.map((t) => (t.done ? t : { ...t, permissionWait: true })),
+            [id]: list.map((t) => (t.done ? t : { ...t, permissionWait: true, permissionWaitSince })),
           }
         })
         os.showPermissionBubble(id)
@@ -375,7 +407,7 @@ export function useExtensionMessages(
           if (!hasPermission) return prev
           return {
             ...prev,
-            [id]: list.map((t) => (t.permissionWait ? { ...t, permissionWait: false } : t)),
+            [id]: list.map((t) => (t.permissionWait ? { ...t, permissionWait: false, permissionWaitSince: undefined } : t)),
           }
         })
         os.clearPermissionBubble(id)
@@ -473,6 +505,7 @@ export function useExtensionMessages(
           status?: string
           agentStatus?: string
           timestamp: number
+          filePath?: string
         }>>
 
         // For each agent, reconstruct history entries and stats
@@ -489,6 +522,7 @@ export function useExtensionMessages(
                 status: ev.status,
                 startTime: ev.timestamp,
                 agentId,
+                filePath: ev.filePath,
               }
               // Find matching toolDone to set endTime
               const doneEv = events.find(e => e.type === 'toolDone' && e.toolId === ev.toolId && e.timestamp > ev.timestamp)

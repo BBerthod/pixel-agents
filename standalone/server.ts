@@ -112,6 +112,7 @@ interface RecentEvent {
 	status?: string;
 	agentStatus?: string;
 	timestamp: number;
+	filePath?: string;
 }
 
 interface AgentState {
@@ -458,6 +459,10 @@ function processTranscriptLine(agentId: number, line: string): void {
 							toolName,
 							block.input || {},
 						);
+						const inp = block.input || {};
+						const filePath = (toolName === 'Read' || toolName === 'Edit' || toolName === 'Write' || toolName === 'NotebookEdit') && typeof inp.file_path === 'string'
+							? inp.file_path as string
+							: undefined;
 						console.log(
 							`[Server] Agent ${agentId} tool start: ${block.id} ${status}`,
 						);
@@ -475,8 +480,9 @@ function processTranscriptLine(agentId: number, line: string): void {
 							status,
 							toolName,
 							timestamp: toolStartTimestamp,
+							filePath,
 						});
-						pushRecentEvent(agent, { type: 'toolStart', toolId: block.id, toolName, status, timestamp: toolStartTimestamp });
+						pushRecentEvent(agent, { type: 'toolStart', toolId: block.id, toolName, status, timestamp: toolStartTimestamp, filePath });
 					}
 				}
 				if (hasNonExemptTool) {
