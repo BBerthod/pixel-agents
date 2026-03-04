@@ -64,8 +64,8 @@ export function SidePanel({
 
   const tabBtnStyle = (t: Tab): React.CSSProperties => ({
     flex: 1,
-    padding: '6px 0',
-    fontSize: '18px',
+    padding: '7px 0',
+    fontSize: '22px',
     background: tab === t ? 'var(--pixel-active-bg)' : 'transparent',
     color: tab === t ? 'var(--pixel-text)' : 'var(--pixel-text-dim)',
     border: 'none',
@@ -92,26 +92,20 @@ export function SidePanel({
       }}
     >
       {/* Tab bar */}
-      <div
-        style={{
-          display: 'flex',
-          borderBottom: '2px solid var(--pixel-border)',
-          flexShrink: 0,
-        }}
-      >
+      <div style={{ display: 'flex', borderBottom: '2px solid var(--pixel-border)', flexShrink: 0 }}>
         <button style={tabBtnStyle('agents')} onClick={() => setTab('agents')}>Agents</button>
         <button style={tabBtnStyle('activity')} onClick={() => setTab('activity')}>Activity</button>
         <button style={tabBtnStyle('stats')} onClick={() => setTab('stats')}>Stats</button>
       </div>
 
       {/* Content */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '6px 0' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '4px 0' }}>
 
-        {/* Agents tab */}
+        {/* ── Agents tab ── */}
         {tab === 'agents' && (
           <div>
             {agents.length === 0 && (
-              <div style={{ padding: '12px', color: 'var(--pixel-text-dim)', fontSize: '18px' }}>
+              <div style={{ padding: '14px', color: 'var(--pixel-text-dim)', fontSize: '22px' }}>
                 No active agents
               </div>
             )}
@@ -130,36 +124,37 @@ export function SidePanel({
                   onMouseEnter={() => setHoveredAgent(id)}
                   onMouseLeave={() => setHoveredAgent(null)}
                   style={{
-                    padding: '8px 10px',
+                    padding: '10px 12px',
                     cursor: 'pointer',
-                    background: isHovered ? 'rgba(255,255,255,0.06)' : 'transparent',
-                    borderBottom: '1px solid rgba(255,255,255,0.05)',
+                    background: isHovered ? 'rgba(255,255,255,0.08)' : 'transparent',
+                    borderBottom: '1px solid rgba(255,255,255,0.07)',
+                    borderLeft: isHovered ? '2px solid var(--pixel-accent)' : '2px solid transparent',
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 3 }}>
                     <span
                       style={{
-                        width: 7,
-                        height: 7,
+                        width: 8,
+                        height: 8,
                         borderRadius: '50%',
                         background: getStatusColor(status),
                         flexShrink: 0,
                       }}
                     />
-                    <span style={{ fontSize: '19px', color: 'var(--pixel-text)', fontWeight: 'bold', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <span style={{ fontSize: '22px', color: 'var(--pixel-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {folder}
                     </span>
                   </div>
                   {activeTool && (
-                    <div style={{ fontSize: '17px', color: 'var(--pixel-text-dim)', paddingLeft: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <div style={{ fontSize: '20px', color: 'var(--pixel-text-dim)', paddingLeft: 15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {activeTool.status}
                     </div>
                   )}
                   {!activeTool && status === 'waiting' && (
-                    <div style={{ fontSize: '17px', color: 'var(--pixel-green)', paddingLeft: 13 }}>Waiting for input</div>
+                    <div style={{ fontSize: '20px', color: 'var(--pixel-green)', paddingLeft: 15 }}>Waiting for input</div>
                   )}
                   {stats && (
-                    <div style={{ fontSize: '16px', color: 'rgba(255,255,255,0.3)', paddingLeft: 13, marginTop: 2 }}>
+                    <div style={{ fontSize: '18px', color: 'rgba(255,255,255,0.35)', paddingLeft: 15, marginTop: 3 }}>
                       {relativeTime(stats.lastActiveAt)}
                     </div>
                   )}
@@ -169,11 +164,11 @@ export function SidePanel({
           </div>
         )}
 
-        {/* Activity tab */}
+        {/* ── Activity tab ── */}
         {tab === 'activity' && (
           <div>
             {globalFeed.length === 0 && (
-              <div style={{ padding: '12px', color: 'var(--pixel-text-dim)', fontSize: '18px' }}>
+              <div style={{ padding: '14px', color: 'var(--pixel-text-dim)', fontSize: '22px' }}>
                 No activity yet
               </div>
             )}
@@ -183,16 +178,15 @@ export function SidePanel({
                 <div
                   key={`${entry.toolId}-${i}`}
                   style={{
-                    padding: '5px 10px',
-                    borderBottom: '1px solid rgba(255,255,255,0.04)',
-                    fontSize: '17px',
+                    padding: '7px 12px',
+                    borderBottom: '1px solid rgba(255,255,255,0.05)',
                   }}
                 >
-                  <div style={{ display: 'flex', gap: 6, alignItems: 'baseline' }}>
-                    <span style={{ color: 'rgba(255,255,255,0.3)', flexShrink: 0 }}>{formatTime(entry.startTime)}</span>
-                    <span style={{ color: 'var(--pixel-accent)', flexShrink: 0 }}>{folder}</span>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', marginBottom: 2 }}>
+                    <span style={{ fontSize: '18px', color: 'rgba(255,255,255,0.35)', flexShrink: 0 }}>{formatTime(entry.startTime)}</span>
+                    <span style={{ fontSize: '20px', color: 'var(--pixel-accent)', flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{folder}</span>
                   </div>
-                  <div style={{ color: 'var(--pixel-text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <div style={{ fontSize: '20px', color: 'var(--pixel-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {entry.status}
                   </div>
                 </div>
@@ -201,11 +195,11 @@ export function SidePanel({
           </div>
         )}
 
-        {/* Stats tab */}
+        {/* ── Stats tab ── */}
         {tab === 'stats' && (
           <div>
             {agents.length === 0 && (
-              <div style={{ padding: '12px', color: 'var(--pixel-text-dim)', fontSize: '18px' }}>
+              <div style={{ padding: '14px', color: 'var(--pixel-text-dim)', fontSize: '22px' }}>
                 No agents
               </div>
             )}
@@ -215,11 +209,11 @@ export function SidePanel({
               const history = agentHistory[id] || []
               if (!stats) return null
               return (
-                <div key={id} style={{ padding: '10px', borderBottom: '2px solid var(--pixel-border)' }}>
-                  <div style={{ fontSize: '19px', color: 'var(--pixel-text)', marginBottom: 6, fontWeight: 'bold' }}>
+                <div key={id} style={{ padding: '12px', borderBottom: '2px solid var(--pixel-border)' }}>
+                  <div style={{ fontSize: '22px', color: 'var(--pixel-text)', marginBottom: 8 }}>
                     {folder}
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 8px', fontSize: '17px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 8px', fontSize: '20px' }}>
                     <span style={{ color: 'var(--pixel-text-dim)' }}>Tools used</span>
                     <span style={{ color: 'var(--pixel-text)' }}>{stats.totalTools}</span>
                     <span style={{ color: 'var(--pixel-text-dim)' }}>Active</span>

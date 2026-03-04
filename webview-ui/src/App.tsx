@@ -134,6 +134,13 @@ function App() {
     vscode.postMessage({ type: 'focusAgent', id })
   }, [])
 
+  const handlePanelSelectAgent = useCallback((id: number) => {
+    const os = getOfficeState()
+    os.selectedAgentId = id
+    os.cameraFollowId = id
+    vscode.postMessage({ type: 'focusAgent', id })
+  }, [])
+
   const containerRef = useRef<HTMLDivElement>(null)
 
   const [editorTickForKeyboard, setEditorTickForKeyboard] = useState(0)
@@ -332,7 +339,7 @@ function App() {
         globalFeed={globalFeed}
         agentStats={agentStats}
         folderNames={folderNames}
-        onSelectAgent={handleSelectAgent}
+        onSelectAgent={handlePanelSelectAgent}
       />
     </div>
   )

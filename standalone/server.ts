@@ -105,6 +105,15 @@ const CHARACTER_DIRECTIONS = ["down", "up", "right"] as const;
 
 // ── Types ──────────────────────────────────────────────────────
 
+interface RecentEvent {
+	type: 'toolStart' | 'toolDone' | 'status';
+	toolId?: string;
+	toolName?: string;
+	status?: string;
+	agentStatus?: string;
+	timestamp: number;
+}
+
 interface AgentState {
 	id: number;
 	jsonlFile: string;
@@ -121,6 +130,7 @@ interface AgentState {
 	hadToolsInTurn: boolean;
 	folderName: string;
 	projectPath: string;
+	recentEvents: RecentEvent[];
 }
 
 interface WsMessage {
@@ -245,6 +255,17 @@ function broadcast(msg: WsMessage): void {
 	}
 }
 
+// ── Recent Event Buffer ────────────────────────────────────────
+
+const MAX_RECENT_EVENTS = 50;
+
+function pushRecentEvent(agent: AgentState, event: RecentEvent): void {
+	agent.recentEvents.push(event);
+	if (agent.recentEvents.length > MAX_RECENT_EVENTS) {
+		agent.recentEvents.shift();
+	}
+}
+
 // ── Tool Status Formatting ─────────────────────────────────────
 
 function formatToolStatus(
@@ -319,7 +340,11 @@ function startWaitingTimer(agentId: number): void {
 		if (agent) {
 			agent.isWaiting = true;
 		}
-		broadcast({ type: "agentStatus", id: agentId, status: "waiting", timestamp: Date.now() });
+		const waitingTimestamp = Date.now();
+		broadcast({ type: "agentStatus", id: agentId, status: "waiting", timestamp: waitingTimestamp });
+		if (agent) {
+			pushRecentEvent(agent, { type: 'status', agentStatus: 'waiting', timestamp: waitingTimestamp });
+		}
 	}, TEXT_IDLE_DELAY_MS);
 	waitingTimers.set(agentId, timer);
 }
@@ -390,7 +415,9 @@ function clearAgentActivity(agent: AgentState): void {
 	agent.permissionSent = false;
 	cancelPermissionTimer(agent.id);
 	broadcast({ type: "agentToolsClear", id: agent.id });
+	const clearActiveTimestamp = Date.now();
 	broadcast({ type: "agentStatus", id: agent.id, status: "active" });
+	pushRecentEvent(agent, { type: 'status', agentStatus: 'active', timestamp: clearActiveTimestamp });
 }
 
 // ── JSONL Parsing ──────────────────────────────────────────────
@@ -420,7 +447,9 @@ function processTranscriptLine(agentId: number, line: string): void {
 				cancelWaitingTimer(agentId);
 				agent.isWaiting = false;
 				agent.hadToolsInTurn = true;
-				broadcast({ type: "agentStatus", id: agentId, status: "active", timestamp: Date.now() });
+				const activeTimestamp = Date.now();
+				broadcast({ type: "agentStatus", id: agentId, status: "active", timestamp: activeTimestamp });
+				pushRecentEvent(agent, { type: 'status', agentStatus: 'active', timestamp: activeTimestamp });
 				let hasNonExemptTool = false;
 				for (const block of blocks) {
 					if (block.type === "tool_use" && block.id) {
@@ -438,14 +467,16 @@ function processTranscriptLine(agentId: number, line: string): void {
 						if (!PERMISSION_EXEMPT_TOOLS.has(toolName)) {
 							hasNonExemptTool = true;
 						}
+						const toolStartTimestamp = Date.now();
 						broadcast({
 							type: "agentToolStart",
 							id: agentId,
 							toolId: block.id,
 							status,
 							toolName,
-							timestamp: Date.now(),
+							timestamp: toolStartTimestamp,
 						});
+						pushRecentEvent(agent, { type: 'toolStart', toolId: block.id, toolName, status, timestamp: toolStartTimestamp });
 					}
 				}
 				if (hasNonExemptTool) {
@@ -498,12 +529,17 @@ function processTranscriptLine(agentId: number, line: string): void {
 							agent.activeToolNames.delete(completedToolId);
 							const toolId = completedToolId;
 							setTimeout(() => {
+								const toolDoneTimestamp = Date.now();
 								broadcast({
 									type: "agentToolDone",
 									id: agentId,
 									toolId,
-									timestamp: Date.now(),
+									timestamp: toolDoneTimestamp,
 								});
+								const agentForEvent = agents.get(agentId);
+								if (agentForEvent) {
+									pushRecentEvent(agentForEvent, { type: 'toolDone', toolId, timestamp: toolDoneTimestamp });
+								}
 							}, TOOL_DONE_DELAY_MS);
 						}
 					}
@@ -543,7 +579,9 @@ function processTranscriptLine(agentId: number, line: string): void {
 			agent.isWaiting = true;
 			agent.permissionSent = false;
 			agent.hadToolsInTurn = false;
-			broadcast({ type: "agentStatus", id: agentId, status: "waiting", timestamp: Date.now() });
+			const turnDoneTimestamp = Date.now();
+			broadcast({ type: "agentStatus", id: agentId, status: "waiting", timestamp: turnDoneTimestamp });
+			pushRecentEvent(agent, { type: 'status', agentStatus: 'waiting', timestamp: turnDoneTimestamp });
 		}
 	} catch {
 		// Ignore malformed lines
@@ -735,6 +773,7 @@ function createAgent(jsonlFile: string, projectDir: string): AgentState {
 		hadToolsInTurn: false,
 		folderName,
 		projectPath,
+		recentEvents: [],
 	};
 
 	// Start from current file size (skip history)
@@ -1322,6 +1361,17 @@ function startServer(port: number, projectFilter: string | null): void {
 					type: 'layoutLoaded',
 					layout: cachedAssets.layout,
 				}));
+
+				// 8. Recent event history per agent
+				const agentRecentHistory: Record<number, RecentEvent[]> = {};
+				for (const agent of agents.values()) {
+					if (agent.recentEvents.length > 0) {
+						agentRecentHistory[agent.id] = agent.recentEvents;
+					}
+				}
+				if (Object.keys(agentRecentHistory).length > 0) {
+					ws.send(JSON.stringify({ type: 'agentRecentHistory', history: agentRecentHistory }));
+				}
 			},
 			message(ws, message) {
 				try {

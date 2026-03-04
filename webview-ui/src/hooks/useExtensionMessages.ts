@@ -465,6 +465,84 @@ export function useExtensionMessages(
         } catch (err) {
           console.error(`❌ Webview: Error processing furnitureAssetsLoaded:`, err)
         }
+      } else if (msg.type === 'agentRecentHistory') {
+        const history = msg.history as Record<number, Array<{
+          type: 'toolStart' | 'toolDone' | 'status'
+          toolId?: string
+          toolName?: string
+          status?: string
+          agentStatus?: string
+          timestamp: number
+        }>>
+
+        // For each agent, reconstruct history entries and stats
+        for (const [agentIdStr, events] of Object.entries(history)) {
+          const agentId = Number(agentIdStr)
+          const historyEntries: HistoryEntry[] = []
+
+          // Build history from toolStart events
+          for (const ev of events) {
+            if (ev.type === 'toolStart' && ev.toolId && ev.status) {
+              const entry: HistoryEntry = {
+                toolId: ev.toolId,
+                toolName: ev.toolName || ev.status,
+                status: ev.status,
+                startTime: ev.timestamp,
+                agentId,
+              }
+              // Find matching toolDone to set endTime
+              const doneEv = events.find(e => e.type === 'toolDone' && e.toolId === ev.toolId && e.timestamp > ev.timestamp)
+              if (doneEv) entry.endTime = doneEv.timestamp
+              historyEntries.push(entry)
+            }
+          }
+
+          if (historyEntries.length > 0) {
+            setAgentHistory((prev) => ({ ...prev, [agentId]: historyEntries.slice(-30) }))
+            setGlobalFeed((prev) => {
+              const merged = [...prev, ...historyEntries].sort((a, b) => a.startTime - b.startTime)
+              return merged.slice(-200)
+            })
+          }
+
+          // Reconstruct stats from events
+          let totalTools = 0
+          let activeMs = 0
+          let waitingMs = 0
+          let lastStatusChange = events[0]?.timestamp || Date.now()
+          let currentStatus: 'active' | 'waiting' | 'idle' = 'idle'
+          let lastActiveAt = events[0]?.timestamp || Date.now()
+
+          for (const ev of events) {
+            if (ev.type === 'toolStart') {
+              totalTools++
+              lastActiveAt = ev.timestamp
+            } else if (ev.type === 'status') {
+              const delta = ev.timestamp - lastStatusChange
+              if (currentStatus === 'active') activeMs += delta
+              else if (currentStatus === 'waiting') waitingMs += delta
+              const newStatus: 'active' | 'waiting' | 'idle' = ev.agentStatus === 'active' ? 'active' : ev.agentStatus === 'waiting' ? 'waiting' : 'idle'
+              currentStatus = newStatus
+              lastStatusChange = ev.timestamp
+            }
+          }
+
+          setAgentStats((prev) => {
+            const existing = prev[agentId]
+            if (existing && existing.totalTools > 0) return prev // don't overwrite live data
+            return {
+              ...prev,
+              [agentId]: {
+                totalTools,
+                activeMs,
+                waitingMs,
+                lastActiveAt,
+                statusChangedAt: lastStatusChange,
+                currentStatus,
+              },
+            }
+          })
+        }
       }
     }
     window.addEventListener('message', handler)

@@ -6,8 +6,8 @@ services:
       - "${PORT:-4242}:${PORT:-4242}"
     volumes:
       # Claude Code JSONL transcripts (read-only)
-      - ${CLAUDE_DIR:-~/.claude}/projects:/home/bun/.claude/projects:ro
+      - ${CLAUDE_DIR:-~/.claude}/projects:/root/.claude/projects:ro
       # Persistent layout storage (read-write)
-      - ${PIXEL_AGENTS_DIR:-~/.pixel-agents}:/home/bun/.pixel-agents
+      - ${PIXEL_AGENTS_DIR:-~/.pixel-agents}:/root/.pixel-agents
     env_file:
       - standalone/.env
