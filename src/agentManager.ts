@@ -5,6 +5,7 @@ import * as vscode from 'vscode';
 import type { AgentState, PersistedAgent } from './types.js';
 import { cancelWaitingTimer, cancelPermissionTimer } from './timerManager.js';
 import { startFileWatching, readNewLines, ensureProjectScan } from './fileWatcher.js';
+import { detectActiveToolsFromTail } from './transcriptParser.js';
 import { JSONL_POLL_INTERVAL_MS, TERMINAL_NAME_PREFIX, WORKSPACE_KEY_AGENTS, WORKSPACE_KEY_AGENT_SEATS } from './constants.js';
 import { migrateAndLoadLayout } from './layoutPersistence.js';
 
@@ -15,6 +16,19 @@ export function getProjectDirPath(cwd?: string): string | null {
 	const projectDir = path.join(os.homedir(), '.claude', 'projects', dirName);
 	console.log(`[Pixel Agents] Project dir: ${workspacePath} → ${dirName}`);
 	return projectDir;
+}
+
+/** Derive a short human-readable project name from a .claude/projects hash dir path.
+ *  e.g. /.../-home-user-projects-pixel-agents → "pixel-agents"
+ *       /.../-home-user-telegram-agent       → "telegram-agent"
+ */
+export function getProjectName(projectDir: string): string {
+	const hash = path.basename(projectDir);
+	const match = hash.match(/-projects-(.+)$/);
+	if (match) return match[1];
+	// Fallback: strip "-home-<username>-" prefix
+	const parts = hash.replace(/^-/, '').split('-');
+	return parts.length > 2 ? parts.slice(2).join('-') : (parts[parts.length - 1] || hash);
 }
 
 export async function launchNewTerminal(
@@ -35,7 +49,6 @@ export async function launchNewTerminal(
 ): Promise<void> {
 	const folders = vscode.workspace.workspaceFolders;
 	const cwd = folderPath || folders?.[0]?.uri.fsPath;
-	const isMultiRoot = !!(folders && folders.length > 1);
 	const idx = nextTerminalIndexRef.current++;
 	const terminal = vscode.window.createTerminal({
 		name: `${TERMINAL_NAME_PREFIX} #${idx}`,
@@ -58,10 +71,11 @@ export async function launchNewTerminal(
 
 	// Create agent immediately (before JSONL file exists)
 	const id = nextAgentIdRef.current++;
-	const folderName = isMultiRoot && cwd ? path.basename(cwd) : undefined;
+	const folderName = getProjectName(projectDir);
 	const agent: AgentState = {
 		id,
 		terminalRef: terminal,
+		source: 'terminal',
 		projectDir,
 		jsonlFile: expectedFile,
 		fileOffset: 0,
@@ -147,9 +161,10 @@ export function persistAgents(
 	for (const agent of agents.values()) {
 		persisted.push({
 			id: agent.id,
-			terminalName: agent.terminalRef.name,
+			terminalName: agent.terminalRef?.name || `observed-${agent.id}`,
 			jsonlFile: agent.jsonlFile,
 			projectDir: agent.projectDir,
+			source: agent.source,
 			folderName: agent.folderName,
 		});
 	}
@@ -181,12 +196,14 @@ export function restoreAgents(
 	let restoredProjectDir: string | null = null;
 
 	for (const p of persisted) {
-		const terminal = liveTerminals.find(t => t.name === p.terminalName);
-		if (!terminal) continue;
+		const isObserved = p.source === 'observed';
+		const terminal = isObserved ? undefined : liveTerminals.find(t => t.name === p.terminalName);
+		if (!terminal && !isObserved) continue;
 
 		const agent: AgentState = {
 			id: p.id,
 			terminalRef: terminal,
+			source: p.source || 'terminal',
 			projectDir: p.projectDir,
 			jsonlFile: p.jsonlFile,
 			fileOffset: 0,
@@ -221,6 +238,14 @@ export function restoreAgents(
 			if (fs.existsSync(p.jsonlFile)) {
 				const stat = fs.statSync(p.jsonlFile);
 				agent.fileOffset = stat.size;
+				// Scan tail to restore any tool state active when the webview closed
+				const toolState = detectActiveToolsFromTail(p.jsonlFile);
+				if (toolState.activeToolIds.size > 0) {
+					agent.activeToolIds = toolState.activeToolIds;
+					agent.activeToolStatuses = toolState.activeToolStatuses;
+					agent.activeToolNames = toolState.activeToolNames;
+					console.log(`[Pixel Agents] Restored agent ${p.id}: detected ${toolState.activeToolIds.size} active tool(s) from JSONL tail`);
+				}
 				startFileWatching(p.id, p.jsonlFile, agents, fileWatchers, pollingTimers, waitingTimers, permissionTimers, webview);
 			} else {
 				// Poll for the file to appear
@@ -275,7 +300,16 @@ export function sendExistingAgents(
 	agentIds.sort((a, b) => a - b);
 
 	// Include persisted palette/seatId from separate key
-	const agentMeta = context.workspaceState.get<Record<string, { palette?: number; seatId?: string }>>(WORKSPACE_KEY_AGENT_SEATS, {});
+	const persistedMeta = context.workspaceState.get<Record<string, { palette?: number; seatId?: string }>>(WORKSPACE_KEY_AGENT_SEATS, {});
+
+	// Merge runtime isIdle flag so the webview can set isActive=false immediately on character creation
+	const agentMeta: Record<string, { palette?: number; seatId?: string; isIdle?: boolean }> = { ...persistedMeta };
+	for (const [id, agent] of agents) {
+		if (agent.activeToolIds.size === 0) {
+			const key = String(id);
+			agentMeta[key] = { ...(agentMeta[key] ?? {}), isIdle: true };
+		}
+	}
 
 	// Include folderName per agent
 	const folderNames: Record<number, string> = {};
@@ -284,7 +318,9 @@ export function sendExistingAgents(
 			folderNames[id] = agent.folderName;
 		}
 	}
-	console.log(`[Pixel Agents] sendExistingAgents: agents=${JSON.stringify(agentIds)}, meta=${JSON.stringify(agentMeta)}`);
+	const idleIds = agentIds.filter((id) => agentMeta[String(id)]?.isIdle);
+	const activeIds = agentIds.filter((id) => !agentMeta[String(id)]?.isIdle);
+	console.log(`[Pixel Agents] sendExistingAgents: total=${agentIds.length} idle=[${idleIds}] active=[${activeIds}] meta=${JSON.stringify(agentMeta)}`);
 
 	webview.postMessage({
 		type: 'existingAgents',
@@ -292,8 +328,9 @@ export function sendExistingAgents(
 		agentMeta,
 		folderNames,
 	});
-
-	sendCurrentAgentStatuses(agents, webview);
+	// Note: sendCurrentAgentStatuses is NOT called here.
+	// It must be called AFTER sendLayout so that agentToolStart messages
+	// arrive after layoutLoaded (i.e., after characters are created).
 }
 
 export function sendCurrentAgentStatuses(
@@ -311,12 +348,14 @@ export function sendCurrentAgentStatuses(
 				status,
 			});
 		}
-		// Re-send waiting status
-		if (agent.isWaiting) {
+		// Do NOT re-send 'waiting' status — it is transient and can be stale after reload.
+		// The file watcher will re-detect it if still relevant.
+		// Mark idle if no active tools so characters don't stay frozen in typing animation.
+		if (agent.activeToolIds.size === 0) {
 			webview.postMessage({
 				type: 'agentStatus',
 				id: agentId,
-				status: 'waiting',
+				status: 'idle',
 			});
 		}
 	}

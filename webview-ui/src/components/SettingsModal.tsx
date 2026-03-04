@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { vscode } from '../vscodeApi.js'
+import { vscode, isStandalone } from '../vscodeApi.js'
 import { isSoundEnabled, setSoundEnabled } from '../notificationSound.js'
 
 interface SettingsModalProps {
@@ -92,48 +92,54 @@ export function SettingsModal({ isOpen, onClose, isDebugMode, onToggleDebugMode 
           </button>
         </div>
         {/* Menu items */}
-        <button
-          onClick={() => {
-            vscode.postMessage({ type: 'openSessionsFolder' })
-            onClose()
-          }}
-          onMouseEnter={() => setHovered('sessions')}
-          onMouseLeave={() => setHovered(null)}
-          style={{
-            ...menuItemBase,
-            background: hovered === 'sessions' ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
-          }}
-        >
-          Open Sessions Folder
-        </button>
-        <button
-          onClick={() => {
-            vscode.postMessage({ type: 'exportLayout' })
-            onClose()
-          }}
-          onMouseEnter={() => setHovered('export')}
-          onMouseLeave={() => setHovered(null)}
-          style={{
-            ...menuItemBase,
-            background: hovered === 'export' ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
-          }}
-        >
-          Export Layout
-        </button>
-        <button
-          onClick={() => {
-            vscode.postMessage({ type: 'importLayout' })
-            onClose()
-          }}
-          onMouseEnter={() => setHovered('import')}
-          onMouseLeave={() => setHovered(null)}
-          style={{
-            ...menuItemBase,
-            background: hovered === 'import' ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
-          }}
-        >
-          Import Layout
-        </button>
+        {!isStandalone && (
+          <button
+            onClick={() => {
+              vscode.postMessage({ type: 'openSessionsFolder' })
+              onClose()
+            }}
+            onMouseEnter={() => setHovered('sessions')}
+            onMouseLeave={() => setHovered(null)}
+            style={{
+              ...menuItemBase,
+              background: hovered === 'sessions' ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
+            }}
+          >
+            Open Sessions Folder
+          </button>
+        )}
+        {!isStandalone && (
+          <button
+            onClick={() => {
+              vscode.postMessage({ type: 'exportLayout' })
+              onClose()
+            }}
+            onMouseEnter={() => setHovered('export')}
+            onMouseLeave={() => setHovered(null)}
+            style={{
+              ...menuItemBase,
+              background: hovered === 'export' ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
+            }}
+          >
+            Export Layout
+          </button>
+        )}
+        {!isStandalone && (
+          <button
+            onClick={() => {
+              vscode.postMessage({ type: 'importLayout' })
+              onClose()
+            }}
+            onMouseEnter={() => setHovered('import')}
+            onMouseLeave={() => setHovered(null)}
+            style={{
+              ...menuItemBase,
+              background: hovered === 'import' ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
+            }}
+          >
+            Import Layout
+          </button>
+        )}
         <button
           onClick={() => {
             const newVal = !isSoundEnabled()

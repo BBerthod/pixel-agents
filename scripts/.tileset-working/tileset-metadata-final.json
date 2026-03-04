@@ -663,7 +663,8 @@
       "partOfGroup": false,
       "groupId": null,
       "canPlaceOnSurfaces": false,
-      "backgroundTiles": 1
+      "backgroundTiles": 1,
+      "isSocialSpot": true
     },
     {
       "id": "ASSET_40",
@@ -682,7 +683,8 @@
       "partOfGroup": false,
       "groupId": null,
       "canPlaceOnSurfaces": false,
-      "backgroundTiles": 1
+      "backgroundTiles": 1,
+      "isSocialSpot": true
     },
     {
       "id": "ASSET_44",
@@ -1090,7 +1092,8 @@
       "groupId": null,
       "canPlaceOnSurfaces": true,
       "backgroundTiles": 1,
-      "canPlaceOnWalls": false
+      "canPlaceOnWalls": false,
+      "isSocialSpot": true
     },
     {
       "id": "ASSET_55",
@@ -1164,7 +1167,8 @@
           "y": 31
         }
       ],
-      "canPlaceOnWalls": false
+      "canPlaceOnWalls": false,
+      "isSocialSpot": true
     },
     {
       "id": "ASSET_61",

@@ -89,13 +89,42 @@ export function ToolOverlay({
         const isHovered = hoveredId === id
         const isSub = ch.isSubagent
 
-        // Only show for hovered or selected agents
-        if (!isSelected && !isHovered) return null
-
         // Position above character
         const sittingOffset = ch.state === CharacterState.TYPE ? CHARACTER_SITTING_OFFSET_PX : 0
         const screenX = (deviceOffsetX + ch.x * zoom) / dpr
         const screenY = (deviceOffsetY + (ch.y + sittingOffset - TOOL_OVERLAY_VERTICAL_OFFSET) * zoom) / dpr
+
+        // Always-visible nametag (project name) for non-subagents
+        if (!isSelected && !isHovered) {
+          if (isSub || !ch.folderName) return null
+          return (
+            <div
+              key={id}
+              style={{
+                position: 'absolute',
+                left: screenX,
+                top: screenY - 20,
+                transform: 'translateX(-50%)',
+                pointerEvents: 'none',
+                zIndex: 'var(--pixel-overlay-z)',
+              }}
+            >
+              <div
+                style={{
+                  background: 'rgba(14,14,22,0.85)',
+                  border: '1px solid var(--pixel-border)',
+                  borderRadius: 0,
+                  padding: '2px 6px',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <span style={{ fontSize: '18px', color: 'var(--pixel-text-dim)' }}>
+                  {ch.folderName}
+                </span>
+              </div>
+            </div>
+          )
+        }
 
         // Get activity text
         const subHasPermission = isSub && ch.bubbleType === 'permission'
@@ -172,7 +201,7 @@ export function ToolOverlay({
                   style={{
                     fontSize: isSub ? '20px' : '22px',
                     fontStyle: isSub ? 'italic' : undefined,
-                    color: 'var(--vscode-foreground)',
+                    color: 'var(--vscode-foreground, rgba(255, 255, 255, 0.9))',
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
                     display: 'block',

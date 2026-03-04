@@ -36,6 +36,7 @@ interface Asset {
   orientation?: string
   state?: string
   canPlaceOnSurfaces?: boolean
+  isSocialSpot?: boolean
   backgroundTiles?: number
 }
 
@@ -55,6 +56,7 @@ interface CatalogEntry {
   orientation?: string
   state?: string
   canPlaceOnSurfaces?: boolean
+  isSocialSpot?: boolean
   backgroundTiles?: number
 }
 
@@ -191,6 +193,11 @@ for (const asset of assets) {
     // Surface placement flag
     if (asset.canPlaceOnSurfaces) {
       entry.canPlaceOnSurfaces = true
+    }
+
+    // Social spot flag
+    if (asset.isSocialSpot) {
+      entry.isSocialSpot = true
     }
 
     // Background tiles

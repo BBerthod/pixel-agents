@@ -6,7 +6,7 @@ import { EditorToolbar } from './office/editor/EditorToolbar.js'
 import { EditorState } from './office/editor/editorState.js'
 import { EditTool } from './office/types.js'
 import { isRotatable } from './office/layout/furnitureCatalog.js'
-import { vscode } from './vscodeApi.js'
+import { vscode, isStandalone } from './vscodeApi.js'
 import { useExtensionMessages } from './hooks/useExtensionMessages.js'
 import { PULSE_ANIMATION_DURATION_SEC } from './constants.js'
 import { useEditorActions } from './hooks/useEditorActions.js'
@@ -121,7 +121,7 @@ function App() {
 
   const isEditDirty = useCallback(() => editor.isEditMode && editor.isDirty, [editor.isEditMode, editor.isDirty])
 
-  const { agents, selectedAgent, agentTools, agentStatuses, subagentTools, subagentCharacters, layoutReady, loadedAssets, workspaceFolders } = useExtensionMessages(getOfficeState, editor.setLastSavedLayout, isEditDirty)
+  const { agents, selectedAgent, agentTools, agentStatuses, subagentTools, subagentCharacters, layoutReady, loadedAssets, workspaceFolders, sshHost } = useExtensionMessages(getOfficeState, editor.setLastSavedLayout, isEditDirty)
 
   const [isDebugMode, setIsDebugMode] = useState(false)
 
@@ -151,12 +151,21 @@ function App() {
   }, [])
 
   const handleClick = useCallback((agentId: number) => {
-    // If clicked agent is a sub-agent, focus the parent's terminal instead
     const os = getOfficeState()
+    // If clicked agent is a sub-agent, resolve to parent
     const meta = os.subagentMeta.get(agentId)
     const focusId = meta ? meta.parentAgentId : agentId
-    vscode.postMessage({ type: 'focusAgent', id: focusId })
-  }, [])
+
+    if (isStandalone && sshHost) {
+      // Open VS Code via vscode-remote URI
+      const ch = os.characters.get(focusId)
+      if (ch?.projectPath) {
+        window.open(`vscode://vscode-remote/ssh-remote+${sshHost}${ch.projectPath}`, '_blank')
+      }
+    } else {
+      vscode.postMessage({ type: 'focusAgent', id: focusId })
+    }
+  }, [sshHost])
 
   const officeState = getOfficeState()
 
@@ -177,7 +186,7 @@ function App() {
 
   if (!layoutReady) {
     return (
-      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--vscode-foreground)' }}>
+      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--vscode-foreground, rgba(255, 255, 255, 0.9))' }}>
         Loading...
       </div>
     )

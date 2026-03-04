@@ -1,0 +1,31 @@
+# Dependencies
+node_modules
+webview-ui/node_modules
+
+# Build output
+dist
+out
+
+# Dev/IDE
+.git
+.github
+.vscode
+.vscode-test
+.claude
+
+# Extension packaging
+*.vsix
+
+# Scripts & docs (not needed at runtime)
+scripts
+docs
+
+# Misc
+*.patch
+.env
+logs
+sprites-export
+CLAUDE.md
+CODE_OF_CONDUCT.md
+CONTRIBUTORS.md
+CHANGELOG.md

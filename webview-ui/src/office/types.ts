@@ -121,6 +121,8 @@ export interface FurnitureCatalogEntry {
   backgroundTiles?: number
   /** Whether this item can be placed on wall tiles */
   canPlaceOnWalls?: boolean
+  /** Whether idle agents are attracted to this furniture as a social gathering spot */
+  isSocialSpot?: boolean
 }
 
 export interface PlacedFurniture {
@@ -183,6 +185,10 @@ export interface Character {
   bubbleTimer: number
   /** Timer to stay seated while inactive after seat reassignment (counts down to 0) */
   seatTimer: number
+  /** Countdown timer for how long to stay at a social spot (0 = not at a spot) */
+  socialSpotTimer: number
+  /** True while the character is waiting at a social spot */
+  atSocialSpot: boolean
   /** Whether this character represents a sub-agent (spawned by Task tool) */
   isSubagent: boolean
   /** Parent agent ID if this is a sub-agent, null otherwise */
@@ -195,4 +201,6 @@ export interface Character {
   matrixEffectSeeds: number[]
   /** Workspace folder name (only set for multi-root workspaces) */
   folderName?: string
+  /** Absolute path to the project directory on the server */
+  projectPath?: string
 }

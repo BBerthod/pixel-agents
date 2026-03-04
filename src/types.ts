@@ -2,7 +2,9 @@ import type * as vscode from 'vscode';
 
 export interface AgentState {
 	id: number;
-	terminalRef: vscode.Terminal;
+	terminalRef?: vscode.Terminal;
+	/** 'terminal' = launched via + Agent button; 'observed' = detected from chat/external JSONL */
+	source: 'terminal' | 'observed';
 	projectDir: string;
 	jsonlFile: string;
 	fileOffset: number;
@@ -24,6 +26,8 @@ export interface PersistedAgent {
 	terminalName: string;
 	jsonlFile: string;
 	projectDir: string;
+	/** 'terminal' = launched via + Agent button; 'observed' = detected from chat/external JSONL */
+	source?: 'terminal' | 'observed';
 	/** Workspace folder name (only set for multi-root workspaces) */
 	folderName?: string;
 }

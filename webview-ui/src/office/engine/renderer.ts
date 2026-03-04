@@ -1,6 +1,6 @@
 import { TileType, TILE_SIZE, CharacterState } from '../types.js'
 import type { TileType as TileTypeVal, FurnitureInstance, Character, SpriteData, Seat, FloorColor } from '../types.js'
-import { getCachedSprite, getOutlineSprite } from '../sprites/spriteCache.js'
+import { getCachedSprite, getOutlineSprite, getColoredOutlineSprite } from '../sprites/spriteCache.js'
 import { getCharacterSprites, BUBBLE_PERMISSION_SPRITE, BUBBLE_WAITING_SPRITE } from '../sprites/spriteData.js'
 import { getCharacterSprite } from './characters.js'
 import { renderMatrixEffect } from './matrixEffect.js'
@@ -12,6 +12,8 @@ import {
   OUTLINE_Z_SORT_OFFSET,
   SELECTED_OUTLINE_ALPHA,
   HOVERED_OUTLINE_ALPHA,
+  ACTIVE_OUTLINE_ALPHA,
+  ACTIVE_OUTLINE_COLOR,
   GHOST_PREVIEW_SPRITE_ALPHA,
   GHOST_PREVIEW_TINT_ALPHA,
   SELECTION_DASH_PATTERN,
@@ -150,12 +152,20 @@ export function renderScene(
       continue
     }
 
-    // White outline: full opacity for selected, 50% for hover
+    // Outline: white for selected/hovered, yellow for active (non-idle) agents
     const isSelected = selectedAgentId !== null && ch.id === selectedAgentId
     const isHovered = hoveredAgentId !== null && ch.id === hoveredAgentId
-    if (isSelected || isHovered) {
-      const outlineAlpha = isSelected ? SELECTED_OUTLINE_ALPHA : HOVERED_OUTLINE_ALPHA
-      const outlineData = getOutlineSprite(spriteData)
+    const showActiveOutline = ch.isActive && !isSelected && !isHovered
+    if (isSelected || isHovered || showActiveOutline) {
+      let outlineAlpha: number
+      let outlineData: SpriteData
+      if (showActiveOutline) {
+        outlineAlpha = ACTIVE_OUTLINE_ALPHA
+        outlineData = getColoredOutlineSprite(spriteData, ACTIVE_OUTLINE_COLOR)
+      } else {
+        outlineAlpha = isSelected ? SELECTED_OUTLINE_ALPHA : HOVERED_OUTLINE_ALPHA
+        outlineData = getOutlineSprite(spriteData)
+      }
       const outlineCached = getCachedSprite(outlineData, zoom)
       const olDrawX = drawX - zoom  // 1 sprite-pixel offset, scaled
       const olDrawY = drawY - zoom  // outline follows sitting offset via drawY

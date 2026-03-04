@@ -33,6 +33,7 @@ export class OfficeState {
   blockedTiles: Set<string>
   furniture: FurnitureInstance[]
   walkableTiles: Array<{ col: number; row: number }>
+  socialSpotTiles: Array<{ col: number; row: number }> = []
   characters: Map<number, Character> = new Map()
   selectedAgentId: number | null = null
   cameraFollowId: number | null = null
@@ -51,6 +52,7 @@ export class OfficeState {
     this.blockedTiles = getBlockedTiles(this.layout.furniture)
     this.furniture = layoutToFurnitureInstances(this.layout.furniture)
     this.walkableTiles = getWalkableTiles(this.tileMap, this.blockedTiles)
+    this.rebuildSocialSpotTiles()
   }
 
   /** Rebuild all derived state from a new layout. Reassigns existing characters.
@@ -62,6 +64,7 @@ export class OfficeState {
     this.blockedTiles = getBlockedTiles(layout.furniture)
     this.rebuildFurnitureInstances()
     this.walkableTiles = getWalkableTiles(this.tileMap, this.blockedTiles)
+    this.rebuildSocialSpotTiles()
 
     // Shift character positions when grid expands left/up
     if (shift && (shift.col !== 0 || shift.row !== 0)) {
@@ -124,6 +127,31 @@ export class OfficeState {
         this.relocateCharacterToWalkable(ch)
       }
     }
+  }
+
+  /** Recompute tiles adjacent to placed social furniture (coffee machine, cooler, etc.) */
+  private rebuildSocialSpotTiles(): void {
+    const result: Array<{ col: number; row: number }> = []
+    const seen = new Set<string>()
+    for (const item of this.layout.furniture) {
+      const entry = getCatalogEntry(item.type)
+      if (!entry?.isSocialSpot) continue
+      // Check all tiles surrounding the footprint
+      for (let dr = -1; dr <= entry.footprintH; dr++) {
+        for (let dc = -1; dc <= entry.footprintW; dc++) {
+          // Skip tiles that are part of the footprint itself
+          if (dr >= 0 && dr < entry.footprintH && dc >= 0 && dc < entry.footprintW) continue
+          const col = item.col + dc
+          const row = item.row + dr
+          const key = `${col},${row}`
+          if (!seen.has(key) && isWalkable(col, row, this.tileMap, this.blockedTiles)) {
+            seen.add(key)
+            result.push({ col, row })
+          }
+        }
+      }
+    }
+    this.socialSpotTiles = result
   }
 
   /** Move a character to a random walkable tile */
@@ -193,7 +221,7 @@ export class OfficeState {
     return { palette, hueShift }
   }
 
-  addAgent(id: number, preferredPalette?: number, preferredHueShift?: number, preferredSeatId?: string, skipSpawnEffect?: boolean, folderName?: string): void {
+  addAgent(id: number, preferredPalette?: number, preferredHueShift?: number, preferredSeatId?: string, skipSpawnEffect?: boolean, folderName?: string, projectPath?: string): void {
     if (this.characters.has(id)) return
 
     let palette: number
@@ -238,6 +266,9 @@ export class OfficeState {
 
     if (folderName) {
       ch.folderName = folderName
+    }
+    if (projectPath) {
+      ch.projectPath = projectPath
     }
     if (!skipSpawnEffect) {
       ch.matrixEffect = 'spawn'
@@ -635,7 +666,7 @@ export class OfficeState {
 
       // Temporarily unblock own seat so character can pathfind to it
       this.withOwnSeatUnblocked(ch, () =>
-        updateCharacter(ch, dt, this.walkableTiles, this.seats, this.tileMap, this.blockedTiles)
+        updateCharacter(ch, dt, this.walkableTiles, this.seats, this.tileMap, this.blockedTiles, this.socialSpotTiles)
       )
 
       // Tick bubble timer for waiting bubbles

@@ -10,6 +10,7 @@ import {
 	persistAgents,
 	sendExistingAgents,
 	sendLayout,
+	sendCurrentAgentStatuses,
 	getProjectDirPath,
 } from './agentManager.js';
 import { ensureProjectScan } from './fileWatcher.js';
@@ -73,13 +74,21 @@ export class PixelAgentsViewProvider implements vscode.WebviewViewProvider {
 				);
 			} else if (message.type === 'focusAgent') {
 				const agent = this.agents.get(message.id);
-				if (agent) {
+				if (agent?.terminalRef) {
 					agent.terminalRef.show();
 				}
 			} else if (message.type === 'closeAgent') {
 				const agent = this.agents.get(message.id);
-				if (agent) {
+				if (agent?.terminalRef) {
 					agent.terminalRef.dispose();
+				} else if (agent) {
+					// Observed agent: just remove it (no terminal to dispose)
+					removeAgent(
+						message.id, this.agents,
+						this.fileWatchers, this.pollingTimers, this.waitingTimers, this.permissionTimers,
+						this.jsonlPollTimers, this.persistAgents,
+					);
+					this.webview?.postMessage({ type: 'agentClosed', id: message.id });
 				}
 			} else if (message.type === 'saveAgentSeats') {
 				// Store seat assignments in a separate key (never touched by persistAgents)
@@ -149,6 +158,7 @@ export class PixelAgentsViewProvider implements vscode.WebviewViewProvider {
 								if (this.webview) {
 									sendLayout(this.context, this.webview, this.defaultLayout);
 									this.startLayoutWatcher();
+									sendCurrentAgentStatuses(this.agents, this.webview);
 								}
 								return;
 							}
@@ -192,6 +202,8 @@ export class PixelAgentsViewProvider implements vscode.WebviewViewProvider {
 							console.log('[Extension] Sending saved layout');
 							sendLayout(this.context, this.webview, this.defaultLayout);
 							this.startLayoutWatcher();
+							// Send active tool/waiting statuses AFTER layout so characters exist
+							sendCurrentAgentStatuses(this.agents, this.webview);
 						}
 					})();
 				} else {
@@ -220,6 +232,8 @@ export class PixelAgentsViewProvider implements vscode.WebviewViewProvider {
 						if (this.webview) {
 							sendLayout(this.context, this.webview, this.defaultLayout);
 							this.startLayoutWatcher();
+							// Send active tool/waiting statuses AFTER layout so characters exist
+							sendCurrentAgentStatuses(this.agents, this.webview);
 						}
 					})();
 				}
@@ -270,7 +284,7 @@ export class PixelAgentsViewProvider implements vscode.WebviewViewProvider {
 			this.activeAgentId.current = null;
 			if (!terminal) return;
 			for (const [id, agent] of this.agents) {
-				if (agent.terminalRef === terminal) {
+				if (agent.terminalRef && agent.terminalRef === terminal) {
 					this.activeAgentId.current = id;
 					webviewView.webview.postMessage({ type: 'agentSelected', id });
 					break;
@@ -280,7 +294,7 @@ export class PixelAgentsViewProvider implements vscode.WebviewViewProvider {
 
 		vscode.window.onDidCloseTerminal((closed) => {
 			for (const [id, agent] of this.agents) {
-				if (agent.terminalRef === closed) {
+				if (agent.terminalRef && agent.terminalRef === closed) {
 					if (this.activeAgentId.current === id) {
 						this.activeAgentId.current = null;
 					}

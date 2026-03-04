@@ -24,6 +24,14 @@ export const CHAR_FRAME_H = 32;
 export const CHAR_FRAMES_PER_ROW = 7;
 export const CHAR_COUNT = 6;
 
+// ── JSONL Restore Scanning ───────────────────────────────────
+/** Bytes to read from JSONL tail to detect active tool state on restore */
+export const RESTORE_TAIL_BYTES = 200 * 1024; // 200 KB
+
+// ── Agent Lifecycle ──────────────────────────────────────────
+/** Remove any agent (terminal or observed) whose JSONL has been inactive this long */
+export const AGENT_INACTIVE_TIMEOUT_MS = 2 * 60 * 60 * 1000; // 2 hours
+
 // ── User-Level Layout Persistence ─────────────────────────────
 export const LAYOUT_FILE_DIR = '.pixel-agents';
 export const LAYOUT_FILE_NAME = 'layout.json';

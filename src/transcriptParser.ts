@@ -1,3 +1,4 @@
+import * as fs from 'fs';
 import * as path from 'path';
 import type * as vscode from 'vscode';
 import type { AgentState } from './types.js';
@@ -13,6 +14,7 @@ import {
 	TEXT_IDLE_DELAY_MS,
 	BASH_COMMAND_DISPLAY_MAX_LENGTH,
 	TASK_DESCRIPTION_DISPLAY_MAX_LENGTH,
+	RESTORE_TAIL_BYTES,
 } from './constants.js';
 
 export const PERMISSION_EXEMPT_TOOLS = new Set(['Task', 'AskUserQuestion']);
@@ -174,6 +176,96 @@ export function processTranscriptLine(
 	} catch {
 		// Ignore malformed lines
 	}
+}
+
+/**
+ * Reads the tail of a JSONL file to detect any tool_use records without a matching
+ * tool_result — i.e., tools that were active when the webview was last closed.
+ * Used during agent restore to populate activeToolIds before sending statuses.
+ */
+export function detectActiveToolsFromTail(jsonlFile: string): {
+	activeToolIds: Set<string>;
+	activeToolStatuses: Map<string, string>;
+	activeToolNames: Map<string, string>;
+} {
+	const result = {
+		activeToolIds: new Set<string>(),
+		activeToolStatuses: new Map<string, string>(),
+		activeToolNames: new Map<string, string>(),
+	};
+	try {
+		const stat = fs.statSync(jsonlFile);
+		if (stat.size === 0) return result;
+
+		const tailSize = Math.min(stat.size, RESTORE_TAIL_BYTES);
+		const buf = Buffer.alloc(tailSize);
+		const fd = fs.openSync(jsonlFile, 'r');
+		fs.readSync(fd, buf, 0, tailSize, stat.size - tailSize);
+		fs.closeSync(fd);
+
+		let lines = buf.toString('utf-8').split('\n').filter(l => l.trim());
+		// If we didn't read from the start, the first line may be partial — drop it
+		if (stat.size > tailSize && lines.length > 0) {
+			lines = lines.slice(1);
+		}
+
+		// Find last turn_duration — everything after it is the current turn
+		let lastTurnDurationIdx = -1;
+		for (let i = lines.length - 1; i >= 0; i--) {
+			try {
+				const r = JSON.parse(lines[i]) as Record<string, unknown>;
+				if (r.type === 'system' && r.subtype === 'turn_duration') {
+					lastTurnDurationIdx = i;
+					break;
+				}
+			} catch { /* skip */ }
+		}
+
+		// Process records after the last turn_duration (or all records if none found)
+		for (let i = lastTurnDurationIdx + 1; i < lines.length; i++) {
+			try {
+				const r = JSON.parse(lines[i]) as Record<string, unknown>;
+				if (r.type === 'assistant' && Array.isArray((r.message as Record<string, unknown>)?.content)) {
+					for (const block of (r.message as Record<string, unknown>).content as Array<{ type: string; id?: string; name?: string; input?: Record<string, unknown> }>) {
+						if (block.type === 'tool_use' && block.id) {
+							const toolName = block.name || '';
+							result.activeToolIds.add(block.id);
+							result.activeToolStatuses.set(block.id, formatToolStatus(toolName, block.input || {}));
+							result.activeToolNames.set(block.id, toolName);
+						}
+					}
+				} else if (r.type === 'user') {
+					const content = (r.message as Record<string, unknown>)?.content;
+					if (Array.isArray(content)) {
+						const blocks = content as Array<{ type: string; tool_use_id?: string }>;
+						if (blocks.some(b => b.type === 'tool_result')) {
+							for (const block of blocks) {
+								if (block.type === 'tool_result' && block.tool_use_id) {
+									result.activeToolIds.delete(block.tool_use_id);
+									result.activeToolStatuses.delete(block.tool_use_id);
+									result.activeToolNames.delete(block.tool_use_id);
+								}
+							}
+						} else {
+							// New user text prompt — all prior tools are done
+							result.activeToolIds.clear();
+							result.activeToolStatuses.clear();
+							result.activeToolNames.clear();
+						}
+					} else if (typeof content === 'string' && content.trim()) {
+						result.activeToolIds.clear();
+						result.activeToolStatuses.clear();
+						result.activeToolNames.clear();
+					}
+				} else if (r.type === 'system' && r.subtype === 'turn_duration') {
+					result.activeToolIds.clear();
+					result.activeToolStatuses.clear();
+					result.activeToolNames.clear();
+				}
+			} catch { /* skip malformed */ }
+		}
+	} catch { /* ignore errors */ }
+	return result;
 }
 
 function processProgressRecord(

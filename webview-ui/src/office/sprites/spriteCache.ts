@@ -45,6 +45,26 @@ export function getOutlineSprite(sprite: SpriteData): SpriteData {
   return outline
 }
 
+const coloredOutlineCaches = new Map<string, WeakMap<SpriteData, SpriteData>>()
+
+/** Generate a 1px colored outline SpriteData */
+export function getColoredOutlineSprite(sprite: SpriteData, color: string): SpriteData {
+  let cache = coloredOutlineCaches.get(color)
+  if (!cache) {
+    cache = new WeakMap()
+    coloredOutlineCaches.set(color, cache)
+  }
+  const cached = cache.get(sprite)
+  if (cached) return cached
+
+  const whiteOutline = getOutlineSprite(sprite)
+  const colored: string[][] = whiteOutline.map((row) =>
+    row.map((px) => (px === '#FFFFFF' ? color : px)),
+  )
+  cache.set(sprite, colored)
+  return colored
+}
+
 export function getCachedSprite(sprite: SpriteData, zoom: number): HTMLCanvasElement {
   let cache = zoomCaches.get(zoom)
   if (!cache) {

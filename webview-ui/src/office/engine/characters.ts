@@ -12,6 +12,8 @@ import {
   WANDER_MOVES_BEFORE_REST_MAX,
   SEAT_REST_MIN_SEC,
   SEAT_REST_MAX_SEC,
+  SOCIAL_SPOT_STAY_MIN_SEC,
+  SOCIAL_SPOT_STAY_MAX_SEC,
 } from '../../constants.js'
 
 /** Tools that show reading animation instead of typing */
@@ -73,6 +75,8 @@ export function createCharacter(
     bubbleType: null,
     bubbleTimer: 0,
     seatTimer: 0,
+    socialSpotTimer: 0,
+    atSocialSpot: false,
     isSubagent: false,
     parentAgentId: null,
     matrixEffect: null,
@@ -88,6 +92,7 @@ export function updateCharacter(
   seats: Map<string, Seat>,
   tileMap: TileTypeVal[][],
   blockedTiles: Set<string>,
+  socialSpotTiles: Array<{ col: number; row: number }> = [],
 ): void {
   ch.frameTimer += dt
 
@@ -115,6 +120,26 @@ export function updateCharacter(
     }
 
     case CharacterState.IDLE: {
+      // If waiting at a social spot, count down timer
+      if (ch.atSocialSpot) {
+        ch.frame = 0
+        if (ch.isActive) {
+          // Agent became active — leave social spot immediately
+          ch.atSocialSpot = false
+          ch.socialSpotTimer = 0
+          // Fall through to the isActive block below to pathfind to seat
+        } else {
+          ch.socialSpotTimer -= dt
+          if (ch.socialSpotTimer > 0) break // still waiting
+          // Done waiting — clear flag, resume normal wandering
+          ch.atSocialSpot = false
+          ch.socialSpotTimer = 0
+          ch.wanderCount = 0
+          ch.wanderLimit = randomInt(WANDER_MOVES_BEFORE_REST_MIN, WANDER_MOVES_BEFORE_REST_MAX)
+          ch.wanderTimer = randomRange(WANDER_PAUSE_MIN_SEC, WANDER_PAUSE_MAX_SEC)
+          break
+        }
+      }
       // No idle animation — static pose
       ch.frame = 0
       if (ch.seatTimer < 0) ch.seatTimer = 0 // clear turn-end sentinel
@@ -149,18 +174,40 @@ export function updateCharacter(
       // Countdown wander timer
       ch.wanderTimer -= dt
       if (ch.wanderTimer <= 0) {
-        // Check if we've wandered enough — return to seat for a rest
-        if (ch.wanderCount >= ch.wanderLimit && ch.seatId) {
-          const seat = seats.get(ch.seatId)
-          if (seat) {
-            const path = findPath(ch.tileCol, ch.tileRow, seat.seatCol, seat.seatRow, tileMap, blockedTiles)
-            if (path.length > 0) {
-              ch.path = path
-              ch.moveProgress = 0
-              ch.state = CharacterState.WALK
-              ch.frame = 0
-              ch.frameTimer = 0
-              break
+        // Check if we've wandered enough
+        if (ch.wanderCount >= ch.wanderLimit) {
+          // Prefer going to a social spot if any are available
+          if (socialSpotTiles.length > 0) {
+            // Try up to 3 random candidates before giving up
+            const shuffled = socialSpotTiles.slice().sort(() => Math.random() - 0.5).slice(0, 3)
+            for (const target of shuffled) {
+              const path = findPath(ch.tileCol, ch.tileRow, target.col, target.row, tileMap, blockedTiles)
+              if (path.length > 0) {
+                ch.path = path
+                ch.moveProgress = 0
+                ch.state = CharacterState.WALK
+                ch.frame = 0
+                ch.frameTimer = 0
+                ch.atSocialSpot = true  // destination is a social spot
+                break
+              }
+            }
+            if (ch.state === CharacterState.WALK) break
+            // No path to any social spot — fall through to seat rest
+          }
+          // No social spots or no path found: return to seat for rest
+          if (ch.seatId) {
+            const seat = seats.get(ch.seatId)
+            if (seat) {
+              const path = findPath(ch.tileCol, ch.tileRow, seat.seatCol, seat.seatRow, tileMap, blockedTiles)
+              if (path.length > 0) {
+                ch.path = path
+                ch.moveProgress = 0
+                ch.state = CharacterState.WALK
+                ch.frame = 0
+                ch.frameTimer = 0
+                break
+              }
             }
           }
         }
@@ -208,6 +255,14 @@ export function updateCharacter(
             }
           }
         } else {
+          // Arrived at social spot — start the wait timer
+          if (ch.atSocialSpot) {
+            ch.state = CharacterState.IDLE
+            ch.socialSpotTimer = randomRange(SOCIAL_SPOT_STAY_MIN_SEC, SOCIAL_SPOT_STAY_MAX_SEC)
+            ch.frame = 0
+            ch.frameTimer = 0
+            break
+          }
           // Check if arrived at assigned seat — sit down for a rest before wandering again
           if (ch.seatId) {
             const seat = seats.get(ch.seatId)
@@ -260,6 +315,8 @@ export function updateCharacter(
 
       // If became active while wandering, repath to seat
       if (ch.isActive && ch.seatId) {
+        ch.atSocialSpot = false
+        ch.socialSpotTimer = 0
         const seat = seats.get(ch.seatId)
         if (seat) {
           const lastStep = ch.path[ch.path.length - 1]

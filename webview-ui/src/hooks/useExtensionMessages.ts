@@ -50,6 +50,7 @@ export interface ExtensionMessageState {
   layoutReady: boolean
   loadedAssets?: { catalog: FurnitureAsset[]; sprites: Record<string, string[][]> }
   workspaceFolders: WorkspaceFolder[]
+  sshHost: string | null
 }
 
 function saveAgentSeats(os: OfficeState): void {
@@ -75,13 +76,14 @@ export function useExtensionMessages(
   const [layoutReady, setLayoutReady] = useState(false)
   const [loadedAssets, setLoadedAssets] = useState<{ catalog: FurnitureAsset[]; sprites: Record<string, string[][]> } | undefined>()
   const [workspaceFolders, setWorkspaceFolders] = useState<WorkspaceFolder[]>([])
+  const [sshHost, setSshHost] = useState<string | null>(null)
 
   // Track whether initial layout has been loaded (ref to avoid re-render)
   const layoutReadyRef = useRef(false)
 
   useEffect(() => {
     // Buffer agents from existingAgents until layout is loaded
-    let pendingAgents: Array<{ id: number; palette?: number; hueShift?: number; seatId?: string; folderName?: string }> = []
+    let pendingAgents: Array<{ id: number; palette?: number; hueShift?: number; seatId?: string; folderName?: string; projectPath?: string; isIdle?: boolean }> = []
 
     const handler = (e: MessageEvent) => {
       const msg = e.data
@@ -103,8 +105,16 @@ export function useExtensionMessages(
           onLayoutLoaded?.(os.getLayout())
         }
         // Add buffered agents now that layout (and seats) are correct
+        const idleOnRestore: number[] = []
         for (const p of pendingAgents) {
-          os.addAgent(p.id, p.palette, p.hueShift, p.seatId, true, p.folderName)
+          os.addAgent(p.id, p.palette, p.hueShift, p.seatId, true, p.folderName, p.projectPath)
+          if (p.isIdle) {
+            os.setAgentActive(p.id, false)
+            idleOnRestore.push(p.id)
+          }
+        }
+        if (idleOnRestore.length > 0) {
+          console.log(`[Webview] Restored ${idleOnRestore.length} idle agents: [${idleOnRestore}]`)
         }
         pendingAgents = []
         layoutReadyRef.current = true
@@ -115,9 +125,10 @@ export function useExtensionMessages(
       } else if (msg.type === 'agentCreated') {
         const id = msg.id as number
         const folderName = msg.folderName as string | undefined
+        const projectPath = msg.projectPath as string | undefined
         setAgents((prev) => (prev.includes(id) ? prev : [...prev, id]))
         setSelectedAgent(id)
-        os.addAgent(id, undefined, undefined, undefined, undefined, folderName)
+        os.addAgent(id, undefined, undefined, undefined, undefined, folderName, projectPath)
         saveAgentSeats(os)
       } else if (msg.type === 'agentClosed') {
         const id = msg.id as number
@@ -147,12 +158,13 @@ export function useExtensionMessages(
         os.removeAgent(id)
       } else if (msg.type === 'existingAgents') {
         const incoming = msg.agents as number[]
-        const meta = (msg.agentMeta || {}) as Record<number, { palette?: number; hueShift?: number; seatId?: string }>
+        const meta = (msg.agentMeta || {}) as Record<number, { palette?: number; hueShift?: number; seatId?: string; isIdle?: boolean }>
         const folderNames = (msg.folderNames || {}) as Record<number, string>
+        const projectPaths = (msg.projectPaths || {}) as Record<number, string>
         // Buffer agents — they'll be added in layoutLoaded after seats are built
         for (const id of incoming) {
           const m = meta[id]
-          pendingAgents.push({ id, palette: m?.palette, hueShift: m?.hueShift, seatId: m?.seatId, folderName: folderNames[id] })
+          pendingAgents.push({ id, palette: m?.palette, hueShift: m?.hueShift, seatId: m?.seatId, folderName: folderNames[id], projectPath: projectPaths[id], isIdle: m?.isIdle })
         }
         setAgents((prev) => {
           const ids = new Set(prev)
@@ -342,6 +354,7 @@ export function useExtensionMessages(
       } else if (msg.type === 'settingsLoaded') {
         const soundOn = msg.soundEnabled as boolean
         setSoundEnabled(soundOn)
+        if (msg.sshHost) setSshHost(msg.sshHost as string)
       } else if (msg.type === 'furnitureAssetsLoaded') {
         try {
           const catalog = msg.catalog as FurnitureAsset[]
@@ -360,5 +373,5 @@ export function useExtensionMessages(
     return () => window.removeEventListener('message', handler)
   }, [getOfficeState])
 
-  return { agents, selectedAgent, agentTools, agentStatuses, subagentTools, subagentCharacters, layoutReady, loadedAssets, workspaceFolders }
+  return { agents, selectedAgent, agentTools, agentStatuses, subagentTools, subagentCharacters, layoutReady, loadedAssets, workspaceFolders, sshHost }
 }

@@ -27,6 +27,7 @@ export interface LoadedAssetData {
     canPlaceOnSurfaces?: boolean
     backgroundTiles?: number
     canPlaceOnWalls?: boolean
+    isSocialSpot?: boolean
   }>
   sprites: Record<string, SpriteData>
 }
@@ -42,7 +43,7 @@ export const FURNITURE_CATALOG: CatalogEntryWithCategory[] = [
   { type: FurnitureType.DESK,       label: 'Desk',       footprintW: 2, footprintH: 2, sprite: DESK_SQUARE_SPRITE,  isDesk: true,  category: 'desks' },
   { type: FurnitureType.BOOKSHELF,  label: 'Bookshelf',  footprintW: 1, footprintH: 2, sprite: BOOKSHELF_SPRITE,    isDesk: false, category: 'storage' },
   { type: FurnitureType.PLANT,      label: 'Plant',      footprintW: 1, footprintH: 1, sprite: PLANT_SPRITE,        isDesk: false, category: 'decor' },
-  { type: FurnitureType.COOLER,     label: 'Cooler',     footprintW: 1, footprintH: 1, sprite: COOLER_SPRITE,       isDesk: false, category: 'misc' },
+  { type: FurnitureType.COOLER,     label: 'Cooler',     footprintW: 1, footprintH: 1, sprite: COOLER_SPRITE,       isDesk: false, category: 'misc', isSocialSpot: true },
   { type: FurnitureType.WHITEBOARD, label: 'Whiteboard', footprintW: 2, footprintH: 1, sprite: WHITEBOARD_SPRITE,   isDesk: false, category: 'decor' },
   { type: FurnitureType.CHAIR,      label: 'Chair',      footprintW: 1, footprintH: 1, sprite: CHAIR_SPRITE,        isDesk: false, category: 'chairs' },
   { type: FurnitureType.PC,         label: 'PC',         footprintW: 1, footprintH: 1, sprite: PC_SPRITE,           isDesk: false, category: 'electronics' },
@@ -104,6 +105,7 @@ export function buildDynamicCatalog(assets: LoadedAssetData): boolean {
       ...(asset.canPlaceOnSurfaces ? { canPlaceOnSurfaces: true } : {}),
       ...(asset.backgroundTiles ? { backgroundTiles: asset.backgroundTiles } : {}),
       ...(asset.canPlaceOnWalls ? { canPlaceOnWalls: true } : {}),
+      ...(asset.isSocialSpot ? { isSocialSpot: true } : {}),
     }
   }).filter((e): e is CatalogEntryWithCategory => e !== null)
 
