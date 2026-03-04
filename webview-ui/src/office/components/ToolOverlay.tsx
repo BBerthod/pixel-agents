@@ -40,6 +40,33 @@ function getActivityText(
   return 'Idle'
 }
 
+const TOOL_INITIALS: Record<string, string> = {
+  Read: 'R', Edit: 'E', Write: 'W', Bash: 'B', Glob: 'G', Grep: 'S',
+  WebFetch: 'F', WebSearch: 'W', Task: 'T', AskUserQuestion: '?',
+  EnterPlanMode: 'P', NotebookEdit: 'N',
+}
+
+function getToolInitial(status: string): string {
+  for (const [name, initial] of Object.entries(TOOL_INITIALS)) {
+    if (status.toLowerCase().startsWith(name.toLowerCase()) || status.toLowerCase().includes(name.toLowerCase())) {
+      return initial
+    }
+  }
+  if (status.startsWith('Running:')) return 'B'
+  if (status.startsWith('Reading ')) return 'R'
+  if (status.startsWith('Editing ')) return 'E'
+  if (status.startsWith('Writing ')) return 'W'
+  if (status.startsWith('Subtask:')) return 'T'
+  if (status.startsWith('Using ')) return '·'
+  return '·'
+}
+
+function getBubbleStatusColor(hasPermission: boolean, isActive: boolean): string {
+  if (hasPermission) return 'var(--pixel-status-permission)'
+  if (isActive) return 'var(--pixel-status-active)'
+  return 'var(--pixel-border)'
+}
+
 export function ToolOverlay({
   officeState,
   agents,
@@ -153,6 +180,10 @@ export function ToolOverlay({
           dotColor = 'var(--pixel-status-active)'
         }
 
+        // Enriched hover bubble: show tool initial + status color
+        const bubbleStatusColor = getBubbleStatusColor(!!hasPermission, !!(isActive && hasActiveTools))
+        const toolInitial = getToolInitial(activityText)
+
         return (
           <div
             key={id}
@@ -173,10 +204,12 @@ export function ToolOverlay({
                 display: 'flex',
                 alignItems: 'center',
                 gap: 5,
-                background: 'var(--pixel-bg)',
+                background: isHovered && !isSelected ? 'rgba(20,20,34,0.97)' : 'var(--pixel-bg)',
                 border: isSelected
                   ? '2px solid var(--pixel-border-light)'
-                  : '2px solid var(--pixel-border)',
+                  : isHovered
+                    ? `2px solid ${bubbleStatusColor}`
+                    : '2px solid var(--pixel-border)',
                 borderRadius: 0,
                 padding: isSelected ? '3px 6px 3px 8px' : '3px 8px',
                 boxShadow: 'var(--pixel-shadow)',
@@ -207,6 +240,11 @@ export function ToolOverlay({
                     display: 'block',
                   }}
                 >
+                  {isHovered && !isSelected && !isSub && (
+                    <span style={{ color: bubbleStatusColor, marginRight: 3, fontWeight: 'bold' }}>
+                      [{toolInitial}]
+                    </span>
+                  )}
                   {activityText}
                 </span>
                 {ch.folderName && (

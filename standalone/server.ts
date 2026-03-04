@@ -319,7 +319,7 @@ function startWaitingTimer(agentId: number): void {
 		if (agent) {
 			agent.isWaiting = true;
 		}
-		broadcast({ type: "agentStatus", id: agentId, status: "waiting" });
+		broadcast({ type: "agentStatus", id: agentId, status: "waiting", timestamp: Date.now() });
 	}, TEXT_IDLE_DELAY_MS);
 	waitingTimers.set(agentId, timer);
 }
@@ -420,7 +420,7 @@ function processTranscriptLine(agentId: number, line: string): void {
 				cancelWaitingTimer(agentId);
 				agent.isWaiting = false;
 				agent.hadToolsInTurn = true;
-				broadcast({ type: "agentStatus", id: agentId, status: "active" });
+				broadcast({ type: "agentStatus", id: agentId, status: "active", timestamp: Date.now() });
 				let hasNonExemptTool = false;
 				for (const block of blocks) {
 					if (block.type === "tool_use" && block.id) {
@@ -443,6 +443,8 @@ function processTranscriptLine(agentId: number, line: string): void {
 							id: agentId,
 							toolId: block.id,
 							status,
+							toolName,
+							timestamp: Date.now(),
 						});
 					}
 				}
@@ -500,6 +502,7 @@ function processTranscriptLine(agentId: number, line: string): void {
 									type: "agentToolDone",
 									id: agentId,
 									toolId,
+									timestamp: Date.now(),
 								});
 							}, TOOL_DONE_DELAY_MS);
 						}
@@ -540,7 +543,7 @@ function processTranscriptLine(agentId: number, line: string): void {
 			agent.isWaiting = true;
 			agent.permissionSent = false;
 			agent.hadToolsInTurn = false;
-			broadcast({ type: "agentStatus", id: agentId, status: "waiting" });
+			broadcast({ type: "agentStatus", id: agentId, status: "waiting", timestamp: Date.now() });
 		}
 	} catch {
 		// Ignore malformed lines
@@ -753,6 +756,7 @@ function createAgent(jsonlFile: string, projectDir: string): AgentState {
 		id,
 		folderName,
 		projectPath,
+		timestamp: Date.now(),
 	});
 
 	return agent;

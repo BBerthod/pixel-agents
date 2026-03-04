@@ -10,6 +10,24 @@ import { setCharacterTemplates } from '../office/sprites/spriteData.js'
 import { vscode } from '../vscodeApi.js'
 import { playDoneSound, setSoundEnabled } from '../notificationSound.js'
 
+export interface HistoryEntry {
+  toolId: string
+  toolName: string
+  status: string
+  startTime: number
+  endTime?: number
+  agentId: number
+}
+
+export interface AgentStats {
+  totalTools: number
+  activeMs: number
+  waitingMs: number
+  lastActiveAt: number
+  statusChangedAt: number
+  currentStatus: 'active' | 'waiting' | 'idle'
+}
+
 export interface SubagentCharacter {
   id: number
   parentAgentId: number
@@ -51,6 +69,10 @@ export interface ExtensionMessageState {
   loadedAssets?: { catalog: FurnitureAsset[]; sprites: Record<string, string[][]> }
   workspaceFolders: WorkspaceFolder[]
   sshHost: string | null
+  agentHistory: Record<number, HistoryEntry[]>
+  globalFeed: HistoryEntry[]
+  agentStats: Record<number, AgentStats>
+  folderNames: Record<number, string>
 }
 
 function saveAgentSeats(os: OfficeState): void {
@@ -77,6 +99,10 @@ export function useExtensionMessages(
   const [loadedAssets, setLoadedAssets] = useState<{ catalog: FurnitureAsset[]; sprites: Record<string, string[][]> } | undefined>()
   const [workspaceFolders, setWorkspaceFolders] = useState<WorkspaceFolder[]>([])
   const [sshHost, setSshHost] = useState<string | null>(null)
+  const [agentHistory, setAgentHistory] = useState<Record<number, HistoryEntry[]>>({})
+  const [globalFeed, setGlobalFeed] = useState<HistoryEntry[]>([])
+  const [agentStats, setAgentStats] = useState<Record<number, AgentStats>>({})
+  const [folderNames, setFolderNames] = useState<Record<number, string>>({})
 
   // Track whether initial layout has been loaded (ref to avoid re-render)
   const layoutReadyRef = useRef(false)
@@ -130,6 +156,13 @@ export function useExtensionMessages(
         setSelectedAgent(id)
         os.addAgent(id, undefined, undefined, undefined, undefined, folderName, projectPath)
         saveAgentSeats(os)
+        if (folderName) {
+          setFolderNames((prev) => ({ ...prev, [id]: folderName }))
+        }
+        setAgentStats((prev) => ({
+          ...prev,
+          [id]: { totalTools: 0, activeMs: 0, waitingMs: 0, lastActiveAt: Date.now(), statusChangedAt: Date.now(), currentStatus: 'idle' },
+        }))
       } else if (msg.type === 'agentClosed') {
         const id = msg.id as number
         setAgents((prev) => prev.filter((a) => a !== id))
@@ -156,16 +189,40 @@ export function useExtensionMessages(
         os.removeAllSubagents(id)
         setSubagentCharacters((prev) => prev.filter((s) => s.parentAgentId !== id))
         os.removeAgent(id)
+        setAgentStats((prev) => {
+          if (!(id in prev)) return prev
+          const next = { ...prev }
+          delete next[id]
+          return next
+        })
+        setFolderNames((prev) => {
+          if (!(id in prev)) return prev
+          const next = { ...prev }
+          delete next[id]
+          return next
+        })
       } else if (msg.type === 'existingAgents') {
         const incoming = msg.agents as number[]
         const meta = (msg.agentMeta || {}) as Record<number, { palette?: number; hueShift?: number; seatId?: string; isIdle?: boolean }>
-        const folderNames = (msg.folderNames || {}) as Record<number, string>
+        const incomingFolderNames = (msg.folderNames || {}) as Record<number, string>
         const projectPaths = (msg.projectPaths || {}) as Record<number, string>
         // Buffer agents — they'll be added in layoutLoaded after seats are built
         for (const id of incoming) {
           const m = meta[id]
-          pendingAgents.push({ id, palette: m?.palette, hueShift: m?.hueShift, seatId: m?.seatId, folderName: folderNames[id], projectPath: projectPaths[id], isIdle: m?.isIdle })
+          pendingAgents.push({ id, palette: m?.palette, hueShift: m?.hueShift, seatId: m?.seatId, folderName: incomingFolderNames[id], projectPath: projectPaths[id], isIdle: m?.isIdle })
         }
+        // Populate folderNames state from restored agents
+        setFolderNames((prev) => ({ ...prev, ...incomingFolderNames }))
+        // Initialize stats for restored agents
+        setAgentStats((prev) => {
+          const next = { ...prev }
+          for (const id of incoming) {
+            if (!(id in next)) {
+              next[id] = { totalTools: 0, activeMs: 0, waitingMs: 0, lastActiveAt: Date.now(), statusChangedAt: Date.now(), currentStatus: 'idle' }
+            }
+          }
+          return next
+        })
         setAgents((prev) => {
           const ids = new Set(prev)
           const merged = [...prev]
@@ -180,10 +237,25 @@ export function useExtensionMessages(
         const id = msg.id as number
         const toolId = msg.toolId as string
         const status = msg.status as string
+        const msgToolName = (msg.toolName as string | undefined) || extractToolName(status) || status
+        const startTime = (msg.timestamp as number | undefined) || Date.now()
         setAgentTools((prev) => {
           const list = prev[id] || []
           if (list.some((t) => t.toolId === toolId)) return prev
           return { ...prev, [id]: [...list, { toolId, status, done: false }] }
+        })
+        // Track history
+        const entry: HistoryEntry = { toolId, toolName: msgToolName, status, startTime, agentId: id }
+        setAgentHistory((prev) => {
+          const list = prev[id] || []
+          const updated = [...list, entry]
+          return { ...prev, [id]: updated.slice(-30) }
+        })
+        setGlobalFeed((prev) => [...prev, entry].slice(-200))
+        // Update stats
+        setAgentStats((prev) => {
+          const s = prev[id] || { totalTools: 0, activeMs: 0, waitingMs: 0, lastActiveAt: startTime, statusChangedAt: startTime, currentStatus: 'idle' as const }
+          return { ...prev, [id]: { ...s, totalTools: s.totalTools + 1, lastActiveAt: startTime } }
         })
         const toolName = extractToolName(status)
         os.setAgentTool(id, toolName)
@@ -201,6 +273,7 @@ export function useExtensionMessages(
       } else if (msg.type === 'agentToolDone') {
         const id = msg.id as number
         const toolId = msg.toolId as string
+        const endTime = (msg.timestamp as number | undefined) || Date.now()
         setAgentTools((prev) => {
           const list = prev[id]
           if (!list) return prev
@@ -209,6 +282,13 @@ export function useExtensionMessages(
             [id]: list.map((t) => (t.toolId === toolId ? { ...t, done: true } : t)),
           }
         })
+        // Update endTime in history
+        setAgentHistory((prev) => {
+          const list = prev[id]
+          if (!list) return prev
+          return { ...prev, [id]: list.map((e) => e.toolId === toolId ? { ...e, endTime } : e) }
+        })
+        setGlobalFeed((prev) => prev.map((e) => e.toolId === toolId && e.agentId === id ? { ...e, endTime } : e))
       } else if (msg.type === 'agentToolsClear') {
         const id = msg.id as number
         setAgentTools((prev) => {
@@ -234,6 +314,7 @@ export function useExtensionMessages(
       } else if (msg.type === 'agentStatus') {
         const id = msg.id as number
         const status = msg.status as string
+        const statusTime = (msg.timestamp as number | undefined) || Date.now()
         setAgentStatuses((prev) => {
           if (status === 'active') {
             if (!(id in prev)) return prev
@@ -242,6 +323,24 @@ export function useExtensionMessages(
             return next
           }
           return { ...prev, [id]: status }
+        })
+        // Update time-tracking stats
+        setAgentStats((prev) => {
+          const s = prev[id]
+          if (!s) return prev
+          const delta = statusTime - s.statusChangedAt
+          const newStatus: 'active' | 'waiting' | 'idle' = status === 'active' ? 'active' : status === 'waiting' ? 'waiting' : 'idle'
+          return {
+            ...prev,
+            [id]: {
+              ...s,
+              activeMs: s.currentStatus === 'active' ? s.activeMs + delta : s.activeMs,
+              waitingMs: s.currentStatus === 'waiting' ? s.waitingMs + delta : s.waitingMs,
+              statusChangedAt: statusTime,
+              currentStatus: newStatus,
+              lastActiveAt: status === 'active' ? statusTime : s.lastActiveAt,
+            },
+          }
         })
         os.setAgentActive(id, status === 'active')
         if (status === 'waiting') {
@@ -373,5 +472,5 @@ export function useExtensionMessages(
     return () => window.removeEventListener('message', handler)
   }, [getOfficeState])
 
-  return { agents, selectedAgent, agentTools, agentStatuses, subagentTools, subagentCharacters, layoutReady, loadedAssets, workspaceFolders, sshHost }
+  return { agents, selectedAgent, agentTools, agentStatuses, subagentTools, subagentCharacters, layoutReady, loadedAssets, workspaceFolders, sshHost, agentHistory, globalFeed, agentStats, folderNames }
 }
