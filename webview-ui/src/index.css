@@ -50,6 +50,7 @@
   --pixel-overlay-z: 100;
   --pixel-overlay-selected-z: 110;
   --pixel-controls-z: 50;
+  --pixel-panel-z: 45;
 }
 
 html, body, #root {

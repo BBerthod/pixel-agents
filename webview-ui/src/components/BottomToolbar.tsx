@@ -10,6 +10,9 @@ interface BottomToolbarProps {
   isDebugMode: boolean
   onToggleDebugMode: () => void
   workspaceFolders: WorkspaceFolder[]
+  isPanelOpen: boolean
+  onTogglePanel: () => void
+  activeAgentCount: number
 }
 
 const panelStyle: React.CSSProperties = {
@@ -51,6 +54,9 @@ export function BottomToolbar({
   isDebugMode,
   onToggleDebugMode,
   workspaceFolders,
+  isPanelOpen,
+  onTogglePanel,
+  activeAgentCount,
 }: BottomToolbarProps) {
   const [hovered, setHovered] = useState<string | null>(null)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
@@ -163,6 +169,34 @@ export function BottomToolbar({
         title="Edit office layout"
       >
         Layout
+      </button>
+      <button
+        onClick={onTogglePanel}
+        onMouseEnter={() => setHovered('panel')}
+        onMouseLeave={() => setHovered(null)}
+        style={
+          isPanelOpen
+            ? { ...btnActive }
+            : {
+                ...btnBase,
+                background: hovered === 'panel' ? 'var(--pixel-btn-hover-bg)' : btnBase.background,
+              }
+        }
+        title="Toggle info panel"
+      >
+        ≡{activeAgentCount > 0 && (
+          <span style={{
+            marginLeft: 4,
+            background: 'var(--pixel-status-active)',
+            color: '#fff',
+            fontSize: '16px',
+            padding: '0 4px',
+            borderRadius: 0,
+            verticalAlign: 'middle',
+          }}>
+            {activeAgentCount}
+          </span>
+        )}
       </button>
       <div style={{ position: 'relative' }}>
         <button

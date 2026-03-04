@@ -14,6 +14,7 @@ import { useEditorKeyboard } from './hooks/useEditorKeyboard.js'
 import { ZoomControls } from './components/ZoomControls.js'
 import { BottomToolbar } from './components/BottomToolbar.js'
 import { DebugView } from './components/DebugView.js'
+import { SidePanel } from './components/SidePanel.js'
 
 // Game state lives outside React — updated imperatively by message handlers
 const officeStateRef = { current: null as OfficeState | null }
@@ -121,13 +122,22 @@ function App() {
 
   const isEditDirty = useCallback(() => editor.isEditMode && editor.isDirty, [editor.isEditMode, editor.isDirty])
 
-  const { agents, selectedAgent, agentTools, agentStatuses, subagentTools, subagentCharacters, layoutReady, loadedAssets, workspaceFolders, sshHost } = useExtensionMessages(getOfficeState, editor.setLastSavedLayout, isEditDirty)
+  const { agents, selectedAgent, agentTools, agentStatuses, subagentTools, subagentCharacters, layoutReady, loadedAssets, workspaceFolders, sshHost, agentHistory, globalFeed, agentStats, folderNames } = useExtensionMessages(getOfficeState, editor.setLastSavedLayout, isEditDirty)
 
   const [isDebugMode, setIsDebugMode] = useState(false)
+  const [isPanelOpen, setIsPanelOpen] = useState(true)
+  const handleTogglePanel = useCallback(() => setIsPanelOpen((prev) => !prev), [])
 
   const handleToggleDebugMode = useCallback(() => setIsDebugMode((prev) => !prev), [])
 
   const handleSelectAgent = useCallback((id: number) => {
+    vscode.postMessage({ type: 'focusAgent', id })
+  }, [])
+
+  const handlePanelSelectAgent = useCallback((id: number) => {
+    const os = getOfficeState()
+    os.selectedAgentId = id
+    os.cameraFollowId = id
     vscode.postMessage({ type: 'focusAgent', id })
   }, [])
 
@@ -193,7 +203,7 @@ function App() {
   }
 
   return (
-    <div ref={containerRef} style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>
+    <div style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden', display: 'flex' }}>
       <style>{`
         @keyframes pixel-agents-pulse {
           0%, 100% { opacity: 1; }
@@ -202,6 +212,7 @@ function App() {
         .pixel-agents-pulse { animation: pixel-agents-pulse ${PULSE_ANIMATION_DURATION_SEC}s ease-in-out infinite; }
       `}</style>
 
+      <div ref={containerRef} style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
       <OfficeCanvas
         officeState={officeState}
         onClick={handleClick}
@@ -239,6 +250,9 @@ function App() {
         isDebugMode={isDebugMode}
         onToggleDebugMode={handleToggleDebugMode}
         workspaceFolders={workspaceFolders}
+        isPanelOpen={isPanelOpen}
+        onTogglePanel={handleTogglePanel}
+        activeAgentCount={agents.filter(id => (agentTools[id] || []).some(t => !t.done)).length}
       />
 
       {editor.isEditMode && editor.isDirty && (
@@ -315,6 +329,20 @@ function App() {
           onSelectAgent={handleSelectAgent}
         />
       )}
+      </div>
+
+      <SidePanel
+        isOpen={isPanelOpen}
+        agents={agents}
+        agentTools={agentTools}
+        agentStatuses={agentStatuses}
+        agentHistory={agentHistory}
+        globalFeed={globalFeed}
+        agentStats={agentStats}
+        folderNames={folderNames}
+        sshHost={sshHost}
+        onSelectAgent={handlePanelSelectAgent}
+      />
     </div>
   )
 }

@@ -79,6 +79,7 @@ export interface ToolActivity {
   status: string
   done: boolean
   permissionWait?: boolean
+  permissionWaitSince?: number
 }
 
 export const FurnitureType = {
